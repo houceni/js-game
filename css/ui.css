@@ -1,0 +1,47 @@
+#InventoryBar{
+    border:2px solid #120B06;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #503621;
+    height:56px;
+    position: absolute;
+    z-index: 12;
+    top:40px;
+    left: 40px;
+    border-radius: 5px;
+    padding-left: 3px;
+    padding-right: 3px;
+    color:white;
+}
+
+#InventoryBar .inventory-slot{
+    background-color: #27180E;
+    border:2px solid #120B06;
+    width: 46px;
+    height:46px;
+    border-radius: 5px;
+    margin-left: 3px;
+    position: relative;
+}
+
+#InventoryBar .inventory-slot.selected{
+    border-color:white;
+}
+
+#InventoryBar .inventory-slot:first-child{
+    margin-left: 0;
+}
+
+#InventoryBar .item-image{
+    height:100%;
+    width: 100%;
+    background-repeat: no-repeat;
+    background-size: cover;
+}
+
+#InventoryBar .slot-counter{
+    position: absolute;
+    right: 0;
+    bottom: 0;
+}
