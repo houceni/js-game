@@ -33,3 +33,9 @@ torch.maxStack = 10
 torch.resource = resources.torch
 torch.isPlaceable = true
 torch.sprite = spriteTorch
+
+const wood = new Item("Wood")
+wood.maxStack = 100
+wood.resource = resources.wood
+wood.isPlaceable = true
+

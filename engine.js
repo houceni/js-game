@@ -82,6 +82,38 @@ const BackgroundComponent = function(name,zIndex,canvasDrawData){
 
 }
 
+const PointLightingComponent = function(canvasDrawData,metaData = {}){
+    this.radius = 10
+    this.color = "#FFF"
+
+    if(!canvasDrawData)
+        canvasDrawData = {}
+    canvasDrawData.type = "PointLight"
+
+    canvasDrawData.isAbsolute = true
+    canvasDrawData.absolutePosition = new Vector2(0,0)
+
+
+    this.getComponent = () => {
+        return {
+            ...metaData,
+            canvas:() => (canvasDrawData),
+            physics: {
+                weight: 0,
+                collision: {
+                    collide: false,
+                    isFixed: true
+                }
+            },
+            passive: true,
+            layer:"globalLightning"
+        }
+
+    }
+
+
+}
+
 const GlobalLightning = {
     addedToScene:false,
     update:null,
@@ -139,8 +171,11 @@ const Background = {
 
 const Destroy = component => {
     const i = ElementsAddedToScene.findIndex(e => e._id === component._id)
-    if(i !== -1)
-        ElementsAddedToScene.splice(i,1)
+    if(i !== -1) {
+        ElementsAddedToScene.splice(i, 1)
+        return true
+    }
+    return false
 }
 
 const Grid = function(canvasDrawData,children,metaData = {}){
@@ -220,7 +255,7 @@ const Grid = function(canvasDrawData,children,metaData = {}){
 
     this.getTileFromPosition = position => {
         if(position instanceof Vector2)
-            return this.tiles.find(e => e.canvasDrawData.gridPosition.x === position.x && e.canvasDrawData.gridPosition.y === position.y)
+            return this.tiles.find(e => Vector2Compare(e.canvasDrawData.gridPosition,position))
         throw new Error("Position must be an instance of Vector2")
     }
 
@@ -352,8 +387,8 @@ const Particles = function(type,height,width,maxParticles,maxDuration,speedMin,s
                     position
                 }),
                 onCollision:() => {
-                    if(hasCollision){
-                        removeElement(component)
+                    if(hasCollision && Destroy(component) && loop){
+                        generateParticle()
                     }
                 },
                 onUpdate:function(transform,force){
@@ -378,9 +413,12 @@ const Particles = function(type,height,width,maxParticles,maxDuration,speedMin,s
                 passive: false,
                 layer:"particles"
             })
-            setTimeout(() => {
-                removeElement(component)
-            },maxDuration * 1000)
+            if(!hasCollision){
+                setTimeout(() => {
+                    Destroy(component)
+                },maxDuration * 1000)
+            }
+
         }
 
         for(let i = 0;i<this.maxParticles;i++){
@@ -1012,6 +1050,8 @@ const drawComponents = (type = "main",first = true,child) => {
 
         if(typeof e === 'object' && typeof e.canvas === 'function'){
 
+
+
             const computedCanvasDrawData = computeCanvasDrawData(e,parent)
 
             const canvasDrawData = computedCanvasDrawData.component.canvasDrawData
@@ -1065,6 +1105,20 @@ const drawComponents = (type = "main",first = true,child) => {
                         context.drawImage(image.image,computedCanvasDrawData.centerX - cameraPosition.x,computedCanvasDrawData.centerY - cameraPosition.y,canvasDrawData.width,canvasDrawData.height)
                     }
 
+                }else if(canvasDrawData.type === "PointLight"){
+                    context.globalCompositeOperation = "destination-out"
+                    const gradient = context.createRadialGradient(computedCanvasDrawData.centerX - cameraPosition.x, computedCanvasDrawData.centerY - cameraPosition.y, 0, computedCanvasDrawData.centerX - cameraPosition.x, computedCanvasDrawData.centerY - cameraPosition.y, canvasDrawData.radius)
+                    gradient.addColorStop(0.0, "rgba(0, 0, 0, 0.9)")
+                    gradient.addColorStop(0.2, "rgba(0, 0, 0, 0.7)")
+                    gradient.addColorStop(0.4, "rgba(0, 0, 0, 0.4)")
+                    gradient.addColorStop(0.7, "rgba(0, 0, 0, 0.2)")
+                    gradient.addColorStop(1.0, "rgba(0, 0, 0, 0)")
+
+                    context.fillStyle = gradient
+                    context.beginPath()
+                    context.arc(computedCanvasDrawData.centerX - cameraPosition.x, computedCanvasDrawData.centerY - cameraPosition.y, canvasDrawData.radius, 0, Math.PI * 2)
+                    context.fill()
+                    context.globalCompositeOperation = "source-over"
                 }
 
                 if(canvasDrawData.image){
@@ -1402,7 +1456,7 @@ const main = () => {
             }
         })
         drawComponent(t)
-        drawComponent(ElementsAddedToScene.find(e => e.layer === "globalLightning"),"globalLightning")
+        drawComponent(ElementsAddedToScene.filter(e => e.layer === "globalLightning"),"globalLightning")
     }
 
     const updateComponents = () => {
@@ -1549,6 +1603,18 @@ const AddToScene = (component,forceDraw = false,parent = null) => {
     ElementsAddedToScene.push(component)
     if(forceDraw){
         computeCanvasDrawData(component,parent)
+        if(typeof component.children === 'function') {
+            component.children().forEach(c => {
+                if(typeof c.getComponent === "function")
+                    c = c.getComponent()
+                c._id = Math.random().toString(36).substring(2,14)
+                c._toUpdate = {
+                    position:null
+                }
+                ElementsAddedToScene.push(c)
+                computeCanvasDrawData(c,component)
+            })
+        }
     }
     return component
 }

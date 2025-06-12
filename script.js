@@ -94,9 +94,11 @@ spriteChar.set("attack",[
 const spriteTools = new Sprite()
 spriteTools.set("Axe",[{resource:"Resources/Images/Tools/axe.png"}])
 spriteTools.set("Pickaxe",[{resource:"Resources/Images/Tools/pickaxe.png"}],true)
-spriteTools.set("Torch",[{resource:"Resources/Images/torch_1.png"},
+spriteTools.set("Torch",[
+    {resource:"Resources/Images/torch_1.png"},
     {resource:"Resources/Images/torch_2.png"},
-    {resource:"Resources/Images/torch_3.png"}],false,200)
+    {resource:"Resources/Images/torch_3.png"}
+],false,200)
 
 spriteTools.set("AxeAttack",[
     {
@@ -400,7 +402,7 @@ let time = 0
 const daySpeed = 0.0001
 
 const getNightOverlayAlpha = (time) => {
-    return Math.min(1 - Math.cos(time * 2 * Math.PI),0.9)
+    return Math.min(1 - Math.cos(time * 2 * Math.PI),0.95)
 }
 
 GlobalLightning.onUpdate(function(transform){
@@ -421,6 +423,7 @@ const childrenCanvas = {
     type:"Sprite",
     sprite:spriteTools,
     position:new Vector2(0,0),
+    scale:0.2,
     isAbsolute:true,
     absolutePosition:new Vector2(23,18)
 }
@@ -432,9 +435,110 @@ InventoryManager.onSlotChange(currentSlot => {
     }
 })
 
+const Vector2Distance = (a, b) => {
+    const dx = a.x - b.x
+    const dy = a.y - b.y
+    return dx * dx + dy * dy
+}
+
+const getClosestTile = (target, tiles) => {
+    let closest = tiles[0]
+    let minDistance = Vector2Distance(target, tiles[0].canvasDrawData.position)
+
+    for (let i = 1; i < tiles.length; i++) {
+        const dist = Vector2Distance(target, tiles[i].canvasDrawData.position)
+        if (dist < minDistance) {
+            minDistance = dist
+            closest = tiles[i]
+        }
+    }
+
+    return closest
+}
+
+
+const placeItem = mousePosition => {
+    const currentPosition = grid.getTilePositionFromMousePosition(mousePosition)
+    const nearTiles = grid.tiles.filter(t => {
+        if(t.tileType === "Wood" || t.tileType === "Attached")
+            return false
+        const tile = t.canvasDrawData
+        return (tile.gridPosition.y === currentPosition.y + 1 && tile.gridPosition.x === currentPosition.x) ||
+            (tile.gridPosition.x === currentPosition.x - 1 && tile.gridPosition.y === currentPosition.y) ||
+            (tile.gridPosition.x === currentPosition.x + 1 && tile.gridPosition.y === currentPosition.y)
+    })
+
+
+    if(nearTiles.length && !grid.getTileFromPosition(currentPosition)){
+        console.log(nearTiles)
+        //find the closest tile and it's position compare to the selected one (bottom,left or right)
+        const closestTile = getClosestTile(mousePosition,nearTiles)
+        console.log(closestTile)
+        //Find where is it (left, bottom or right)
+        if(closestTile.canvasDrawData.position.x > currentPosition.x){
+            //right
+            console.log("right")
+        }else if(closestTile.canvasDrawData.position.x < currentPosition.x){
+            console.log("left")
+        }else{
+            console.log("bottom")
+        }
+
+        const newSprite = Object.assign(Object.create(Object.getPrototypeOf(InventoryManager.getCurrentItem().sprite)), InventoryManager.getCurrentItem().sprite)
+        //Attach the item on the tile
+
+        let x = float2int(Camera.bounds.p1.x + mousePosition.x - (grid.component.canvasDrawData.tileSize / 2))
+        let y = float2int(float2int(Camera.bounds.p1.y) + mousePosition.y)
+
+        AddToScene({
+            lastTime:0,
+            canvas:() => ({
+                type:"Sprite",
+                position:new Vector2(x,y),
+                sprite:newSprite,
+                height:32,
+                width:32
+            }),
+            physics: {
+                weight: 0,
+                collision: {
+                    collide: false,
+                    isFixed: false
+                }
+            },
+            children:function(){
+                const radius = 300
+                return [new PointLightingComponent({
+                    radius,
+                    position:new Vector2(0,0)
+                },{
+                    onUpdate:(transform) => {
+
+                        if(this.lastTime + 100 < Date.now()){
+                            transform.radius = radius + (Math.random() - 0.5) * 10
+                            this.lastTime = Date.now()
+                        }
+                    }
+                })]
+            },
+            passive: false,
+            layer:"dynamic",
+            tileType:"Torch"
+        },true)
+        const newTile = new Tile({
+            position: new Vector2(currentPosition.x, currentPosition.y)
+        },{
+            tileType:"Attached"
+        })
+        grid.SetTile(newTile)
+
+    }
+}
+
 AddToScene({
-    movementSpeed:0.25,
+    movementSpeed:0.22,
     isRight:true,
+    hasMoved:false,
     canvas:() => ({
         type:"Sprite",
         position:new Vector2(0,100),
@@ -459,8 +563,10 @@ AddToScene({
         Camera.follow(gameObject)
     },
     beforeCollision:function(component){
-        if(component.isItem){
-            Destroy(component)
+        if(component.isItem && Destroy(component)){
+            InventoryManager.addItem(
+                Item.all[component.itemType]
+            )
         }
         return !component.isItem
     },
@@ -486,10 +592,7 @@ AddToScene({
         const isSprinting = Input.getKey("Shift")
         const isAttacking = Input.getKey("mousedown") && isColliding && spriteChar.currentSet === "idle"
 
-        //rain.setPosition({
-        //    p1:new Vector2(Camera.bounds.p1.x - 100,Camera.bounds.p1.y - 100),
-        //    p2:new Vector2(Camera.bounds.p2.x + 100,Camera.bounds.p1.y - 90)
-        //})
+
 
         if(movement < 0 && this.isRight){
             this.isRight = false
@@ -505,6 +608,7 @@ AddToScene({
 
         if(isColliding && Input.getKey("Space")){
             force.AddForce(30)
+            this.hasMoved = true
         }
         //Previous Tile
 
@@ -515,7 +619,7 @@ AddToScene({
         //}
         focusedTile = newTile
 
-        if(isAttacking && (InventoryManager.getCurrentItem().isWeapon || !InventoryManager.getCurrentItem().name)){
+        if(isAttacking && (InventoryManager.getCurrentItem().isWeapon || !InventoryManager.getCurrentItem())){
             if(spriteTools.currentSet.indexOf("Attack") === -1) {
                 spriteTools.playOnce(spriteTools.currentSet + "Attack")
             }else{
@@ -536,56 +640,29 @@ AddToScene({
                 DamageTile(newTile)
             }
         }else if(isAttacking && InventoryManager.getCurrentItem().isPlaceable){
-            const currentPosition = grid.getTilePositionFromMousePosition(MousePosition)
-            const nearTile = grid.tiles.find(t => {
-                if(t.tileType === "Wood" || t.tileType === "Attached")
-                    return false
-                const tile = t.canvasDrawData
-                    return (tile.gridPosition.y === currentPosition.y + 1 && tile.gridPosition.x === currentPosition.x) ||
-                (tile.gridPosition.x === currentPosition.x - 1 && tile.gridPosition.y === currentPosition.y) ||
-                    (tile.gridPosition.x === currentPosition.x + 1 && tile.gridPosition.y === currentPosition.y)
-                }
-            )
-            if(nearTile && !grid.getTileFromPosition(currentPosition)){
-                const newSprite = Object.assign(Object.create(Object.getPrototypeOf(InventoryManager.getCurrentItem().sprite)), InventoryManager.getCurrentItem().sprite)
-                //Attach the item on the tile
-                AddToScene({
-                    canvas:() => ({
-                        type:"Sprite",
-                        position:new Vector2(currentPosition.x,currentPosition.y),
-                        sprite:newSprite,
-                        height:32,
-                        width:32
-                    }),
-                    physics: {
-                        weight: 0,
-                        collision: {
-                            collide: true,
-                            isFixed: false
-                        }
-                    },
-                    passive: true,
-                    layer:"main",
-                    tileType:"Torch"
-                },true)
-                const newTile = new Tile({
-                    position: new Vector2(currentPosition.x, currentPosition.y)
-                },{
-                    tileType:"Attached"
-                })
-                grid.SetTile(newTile)
-
-            }
+            const mousePosition = new Vector2(MousePosition.x,MousePosition.y)
+            placeItem(mousePosition)
         }
 
         if(movement > 0 || movement < 0){
             //move to the right
+            this.hasMoved = true
             if(spriteChar.currentSet !== "move")
                 spriteChar.setState("move")
             transform.position.x += (!isSprinting ? 1 : 1.5) * movement * this.movementSpeed * DeltaTime
         }else{
             if(spriteChar.currentSet === "move")
                 spriteChar.setState("idle")
+        }
+
+
+        if(this.hasMoved){
+            this.hasMoved = false
+
+            //rain.setPosition({
+            //    p1:new Vector2(Camera.bounds.p1.x - 100,Camera.bounds.p1.y - 100),
+            //    p2:new Vector2(Camera.bounds.p2.x + 100,Camera.bounds.p1.y - 90)
+            //})
         }
     },
     passive: false,
@@ -801,11 +878,12 @@ const DamageTile = tile => {
                                             height:20,
                                             display: false
                                         },
-                                        notCollideWith:component => component.isItem
+                                        notCollideWith:component => component.isItem || component.isPlayer
                                     }
                                 },
                                 passive: false,
-                                isItem:true
+                                isItem:true,
+                                itemType:"Wood"
                             },true)
                             tilesToRemove.push(tileAbove)
 
