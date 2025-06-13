@@ -4,7 +4,7 @@ export const InventoryManager = {
     currentSlot:0,
     onChange:null,
     addItem: item => {
-        let slotIndex = InventoryManager.slots.findIndex(e => e.item && e.item.name === item.name && e.count + 1 < item.maxStack)
+        let slotIndex = InventoryManager.slots.findIndex(e => e.item && e.item.name === item.name && e.count + 1 <= item.maxStack)
         if(slotIndex === -1) {
             slotIndex = InventoryManager.slots.findIndex(e => e.isEmpty)
             InventoryManager.slots[slotIndex] = {item: item, count: 1}
@@ -12,12 +12,8 @@ export const InventoryManager = {
         else{
             InventoryManager.slots[slotIndex].count++
         }
-        //REFRESH UI
-        const InventoryBarElement = document.getElementById("InventoryBar")
-        const slotElements = InventoryBarElement.querySelectorAll(".inventory-slot")
 
-        slotElements[slotIndex].querySelector(".slot-counter").innerHTML = InventoryManager.slots[slotIndex].count
-        slotElements[slotIndex].querySelector(".item-image").style.backgroundImage = `url("${InventoryManager.slots[slotIndex].item.resource.url}")`
+        InventoryManager.updateSlotsUI(slotIndex)
 
     },
     build:() => {
@@ -45,7 +41,31 @@ export const InventoryManager = {
             InventoryBarElement.appendChild(slotElement)
         }
     },
-    selectSlot:index => {
+    decreaseCurrentSlot:() => {
+        const currentSlot = InventoryManager.slots[InventoryManager.currentSlot]
+        if(currentSlot && currentSlot.count){
+            if(currentSlot.count - 1 > 0){
+                InventoryManager.slots[InventoryManager.currentSlot].count--
+                return InventoryManager.updateSlotsUI(InventoryManager.currentSlot)
+            }
+        }
+        InventoryManager.slots[InventoryManager.currentSlot] = {
+            isEmpty:true
+        }
+        InventoryManager.updateSlotsUI(InventoryManager.currentSlot)
+    },
+    updateSlotsUI:slotIndex => {
+        //REFRESH UI
+        const InventoryBarElement = document.getElementById("InventoryBar")
+        const slotElements = InventoryBarElement.querySelectorAll(".inventory-slot")
+
+        if(InventoryManager.slots[slotIndex].count){
+            slotElements[slotIndex].querySelector(".slot-counter").innerHTML = InventoryManager.slots[slotIndex].count
+            slotElements[slotIndex].querySelector(".item-image").style.backgroundImage = `url("${InventoryManager.slots[slotIndex].item.resource.url}")`
+        }else{
+            slotElements[slotIndex].querySelector(".slot-counter").innerHTML = ""
+            slotElements[slotIndex].querySelector(".item-image").style.backgroundImage = "none"
+        }
 
     },
     slotUp:() => {

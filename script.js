@@ -25,7 +25,6 @@ const startingX = -25;
 const startingY = 0;
 const spriteChar = new Sprite()
 
-const AudioPlayer = new Audio()
 let focusedTile = null
 
 const spriteItem = new Sprite()
@@ -399,9 +398,9 @@ rain.vy = 0
 //rain.play(true)
 
 let time = 0
-const daySpeed = 0.0001
+const daySpeed = 0.001
 
-const getNightOverlayAlpha = (time) => {
+const getNightOverlayAlpha = time => {
     return Math.min(1 - Math.cos(time * 2 * Math.PI),0.95)
 }
 
@@ -411,13 +410,28 @@ GlobalLightning.onUpdate(function(transform){
     transform.backgroundColor = `rgba(0, 0, 0, ${getNightOverlayAlpha(time)})`
 })
 
-new BackgroundComponent("background",-2,canvas => ({
+new BackgroundComponent("background",-3,canvas => ({
     type:"rect",
     image:resources.background,
     height:canvas.height,
     width:canvas.width,
-    position:new Vector2(0,0)
+    position:new Vector2(0,0),
+    isFixed:true
 }))
+
+new BackgroundComponent("background-overlay",-2,canvas => ({
+    type:"rect",
+    height:canvas.height,
+    width:canvas.width,
+    position:new Vector2(0,0),
+    backgroundColor:"rgba(0, 0, 0, 0)"
+}),{
+    onUpdate:transform => {
+        transform.position.y = Camera.bounds.p1.y - 50
+        transform.position.x = Camera.bounds.p1.x - 50
+        transform.backgroundColor = `rgba(0, 0, 0, ${getNightOverlayAlpha(time)})`
+    }
+})
 
 const childrenCanvas = {
     type:"Sprite",
@@ -468,8 +482,9 @@ const placeItem = mousePosition => {
             (tile.gridPosition.x === currentPosition.x + 1 && tile.gridPosition.y === currentPosition.y)
     })
 
+    const item = InventoryManager.getCurrentItem()
 
-    if(nearTiles.length && !grid.getTileFromPosition(currentPosition)){
+    if(nearTiles.length && !grid.getTileFromPosition(currentPosition) && item.name === "Torch"){
         console.log(nearTiles)
         //find the closest tile and it's position compare to the selected one (bottom,left or right)
         const closestTile = getClosestTile(mousePosition,nearTiles)
@@ -484,7 +499,7 @@ const placeItem = mousePosition => {
             console.log("bottom")
         }
 
-        const newSprite = Object.assign(Object.create(Object.getPrototypeOf(InventoryManager.getCurrentItem().sprite)), InventoryManager.getCurrentItem().sprite)
+        const newSprite = Object.assign(Object.create(Object.getPrototypeOf(item.sprite)), item.sprite)
         //Attach the item on the tile
 
         let x = float2int(Camera.bounds.p1.x + mousePosition.x - (grid.component.canvasDrawData.tileSize / 2))
@@ -531,7 +546,21 @@ const placeItem = mousePosition => {
             tileType:"Attached"
         })
         grid.SetTile(newTile)
+        InventoryManager.decreaseCurrentSlot()
 
+    }else if(nearTiles.length && !grid.getTileFromPosition(currentPosition)){
+        const tile = new Tile({
+            position: currentPosition,
+            image:item.resource
+        },{
+            tileType:"Plank",
+            health:3
+        })
+        tile.physics.collision.collide = true
+        grid.SetTile(
+            tile
+        )
+        InventoryManager.decreaseCurrentSlot()
     }
 }
 
@@ -830,78 +859,110 @@ const DamageTile = tile => {
     if(tile.health > 0) {
         tile.health--
         if(tile.health === 0){
-            if(tile.tileType === "Wood"){
-                const tilesToRemove = []
-                tilesToRemove.push(tile)
+            const tilesToRemove = []
+            tilesToRemove.push(tile)
+
+            if(tile.tileType === "Wood" || tile.tileType === "Plank"){
                 //ChopTree(tilePosition,resourceObject.gameObject);
                 let x = tile.canvasDrawData.gridPosition.x
 
-                const woodTiles = grid.tiles.filter(t => t.tileType === "Wood" && t.canvasDrawData.gridPosition.x === x)
-
-                if(woodTiles.length){
-                    let lastY = tile.canvasDrawData.gridPosition.y
-
-                    let i = lastY
-                    const breakAt = i - 20
-
-                    let tileAbove = null
-
-                    while (i > breakAt)
-                    {
-                        i--
-                        tileAbove = woodTiles.find(tile => tile.canvasDrawData.gridPosition.y === i)
-
-                        if (tileAbove)
-                        {
-                            lastY = i
-                            const x = randomIntFromInterval(-10,10)
-                            const y = randomIntFromInterval(-10,10)
-                            const p = new Vector2(tileAbove.canvasDrawData.position.x + x,tileAbove.canvasDrawData.position.y + y)
-                            AddToScene({
-                                canvas:() => ({
-                                    type:"Sprite",
-                                    position:p,
-                                    sprite:spriteItem,
-                                    scale:0.8,
-                                    height:32,
-                                    width:32,
-                                }),
-                                physics: {
-                                    weight: 4,
-                                    collision: {
-                                        collide: true,
-                                        isFixed: false,
-                                        collideBox:{
-                                            y:4,
-                                            x:null,
-                                            width:28,
-                                            height:20,
-                                            display: false
-                                        },
-                                        notCollideWith:component => component.isItem || component.isPlayer
-                                    }
-                                },
-                                passive: false,
-                                isItem:true,
-                                itemType:"Wood"
-                            },true)
-                            tilesToRemove.push(tileAbove)
-
-                            //ChopTree(tilePosition, resourceObject.gameObject);
+                AddToScene({
+                    canvas:() => ({
+                        type:"Sprite",
+                        position:new Vector2(tile.canvasDrawData.position.x,tile.canvasDrawData.position.y),
+                        sprite:spriteItem,
+                        scale:0.8,
+                        height:32,
+                        width:32,
+                    }),
+                    physics: {
+                        weight: 4,
+                        collision: {
+                            collide: true,
+                            isFixed: false,
+                            collideBox:{
+                                y:4,
+                                x:null,
+                                width:28,
+                                height:20,
+                                display: false
+                            },
+                            notCollideWith:component => component.isItem || component.isPlayer
                         }
-                        else
+                    },
+                    passive: false,
+                    isItem:true,
+                    itemType:"Wood"
+                },true)
+
+                if(tile.tileType === "Wood"){
+                    const woodTiles = grid.tiles.filter(t => t.tileType === "Wood" && t.canvasDrawData.gridPosition.x === x)
+
+                    if(woodTiles.length){
+                        let lastY = tile.canvasDrawData.gridPosition.y
+
+                        let i = lastY
+                        const breakAt = i - 20
+
+                        let tileAbove = null
+
+                        while (i > breakAt)
                         {
-                            break
+                            i--
+                            tileAbove = woodTiles.find(tile => tile.canvasDrawData.gridPosition.y === i)
+
+                            if (tileAbove)
+                            {
+                                lastY = i
+                                const x = randomIntFromInterval(-10,10)
+                                const y = randomIntFromInterval(-10,10)
+                                const p = new Vector2(tileAbove.canvasDrawData.position.x + x,tileAbove.canvasDrawData.position.y + y)
+                                AddToScene({
+                                    canvas:() => ({
+                                        type:"Sprite",
+                                        position:p,
+                                        sprite:spriteItem,
+                                        scale:0.8,
+                                        height:32,
+                                        width:32,
+                                    }),
+                                    physics: {
+                                        weight: 4,
+                                        collision: {
+                                            collide: true,
+                                            isFixed: false,
+                                            collideBox:{
+                                                y:4,
+                                                x:null,
+                                                width:28,
+                                                height:20,
+                                                display: false
+                                            },
+                                            notCollideWith:component => component.isItem || component.isPlayer
+                                        }
+                                    },
+                                    passive: false,
+                                    isItem:true,
+                                    itemType:"Wood"
+                                },true)
+                                tilesToRemove.push(tileAbove)
+
+                                //ChopTree(tilePosition, resourceObject.gameObject);
+                            }
+                            else
+                            {
+                                break
+                            }
                         }
+                        AudioComponent.play(AudioResources.tree_down)
+                        //Remove the leaves
+                        RemoveLeaves(new Vector2(x,lastY - 1)).forEach(t => tilesToRemove.push(t))
                     }
-                    AudioComponent.play(AudioResources.tree_down)
-                    //Remove the leaves
-                    RemoveLeaves(new Vector2(x,lastY - 1)).forEach(t => tilesToRemove.push(t))
                 }
-                grid.removeMultiples(tilesToRemove)
-            }else{
-                grid.removeTile(tile)
+
             }
+
+            grid.removeMultiples(tilesToRemove)
         }
     }
 }

@@ -61,13 +61,21 @@ const LightComponent = function(){
 
 }
 
-const BackgroundComponent = function(name,zIndex,canvasDrawData){
+const BackgroundComponent = function(name,zIndex,canvasDrawData,metaData = {}){
+
+    this.component = null
+
+    BackgroundComponent.components.push({name,component:this})
 
     document.addEventListener("DOMContentLoaded",() => {
         addCanvas(name,zIndex)
 
-        return AddToScene({
-            canvas: (canvas) => (canvasDrawData(canvas)),
+        this.component = AddToScene({
+            canvas: (canvas) => {
+                const c = canvasDrawData(canvas)
+                c.isBackground = true
+                return c
+            },
             physics: {
                 weight: 0,
                 collision: {
@@ -76,11 +84,14 @@ const BackgroundComponent = function(name,zIndex,canvasDrawData){
                 }
             },
             passive:true,
-            layer:name
-        })
+            layer:name,
+            ...metaData
+        },true)
+        return this.component
     })
 
 }
+BackgroundComponent.components = []
 
 const PointLightingComponent = function(canvasDrawData,metaData = {}){
     this.radius = 10
@@ -187,6 +198,7 @@ const Grid = function(canvasDrawData,children,metaData = {}){
     this.SetTile = tile => {
         const addedTile = AddToScene(tile,true,this.component)
         this.tiles.push(addedTile)
+        drawForCamera("main")
     }
 
     this.removeTileAt = position => {
@@ -392,7 +404,6 @@ const Particles = function(type,height,width,maxParticles,maxDuration,speedMin,s
                     }
                 },
                 onUpdate:function(transform,force){
-
                     if(!this.isNegative){
                         transform.position.x += (this.vx / 100) * DeltaTime
                     }else{
@@ -725,6 +736,11 @@ const Camera = {
                 Camera.bounds.p2 = new Vector2((objectPosition.x - screenX) + dynamicCanvas.width, (objectPosition.y - screenY) + dynamicCanvas.height)
                 //We do a soft draw without all the calculation
                 drawForCamera("main",newPosition)
+                BackgroundComponent.components.forEach(c => {
+                    if(!c.component.component.onUpdate) {
+                        drawForCamera(c.name, newPosition)
+                    }
+                })
                 Camera.lastObjectPosition = new Vector2(objectPosition.x,objectPosition.y)
                 Camera.position = newPosition
             }
@@ -822,7 +838,6 @@ const drawFromPosition = (type,bounds,cameraPosition,reset = true) => {
         context.clearRect(bounds.p1.x - cameraPosition.x, bounds.p1.y - cameraPosition.y,bounds.p1.x - bounds.p2.x, bounds.p1.y - bounds.p2.y)
     }
 
-
     const objectsInView = []
 
     ElementsAddedToScene.filter(e => {
@@ -832,21 +847,25 @@ const drawFromPosition = (type,bounds,cameraPosition,reset = true) => {
         return e.layer === type
     }).forEach(e => {
         const canvasDrawData = e.canvasDrawData
-
-        if(
-            canvasDrawData.position.x + 50 >= Camera.bounds.p1.x &&
-            canvasDrawData.position.x - 50 <= Camera.bounds.p2.x &&
-            canvasDrawData.position.y + 50 >= Camera.bounds.p1.y &&
-            canvasDrawData.position.y - 50 <= Camera.bounds.p2.y
-        ) {
-            objectsInView.push(e)
+        if(type === "main"){
+            if(
+                canvasDrawData.position.x + 50 >= Camera.bounds.p1.x &&
+                canvasDrawData.position.x - 50 <= Camera.bounds.p2.x &&
+                canvasDrawData.position.y + 50 >= Camera.bounds.p1.y &&
+                canvasDrawData.position.y - 50 <= Camera.bounds.p2.y
+            ) {
+                objectsInView.push(e)
+            }
         }
 
+
         if(
-            canvasDrawData.position.x + 50 >= bounds.p1.x &&
+            (canvasDrawData.position.x + 50 >= bounds.p1.x &&
             canvasDrawData.position.x - 50 <= bounds.p2.x &&
             canvasDrawData.position.y + 50 >= bounds.p1.y &&
-            canvasDrawData.position.y - 50 <= bounds.p2.y
+            canvasDrawData.position.y - 50 <= bounds.p2.y)
+
+            || (canvasDrawData.isFixed)
         ){
             context.beginPath()
             const centerX = canvasDrawData.position.x
@@ -870,7 +889,12 @@ const drawFromPosition = (type,bounds,cameraPosition,reset = true) => {
                 if(canvasDrawData.opacity){
                     context.globalAlpha = canvasDrawData.opacity
                 }
-                context.drawImage(canvasDrawData.isMirror ? canvasDrawData.image.getMirror() : canvasDrawData.image.loadedImage,centerX - cameraPosition.x,centerY - cameraPosition.y,canvasDrawData.width,canvasDrawData.height)
+                if(canvasDrawData.isFixed){
+                    console.log('HERE')
+                    context.drawImage(canvasDrawData.isMirror ? canvasDrawData.image.getMirror() : canvasDrawData.image.loadedImage,centerX,centerY,canvasDrawData.width,canvasDrawData.height)
+                }else{
+                    context.drawImage(canvasDrawData.isMirror ? canvasDrawData.image.getMirror() : canvasDrawData.image.loadedImage,centerX - cameraPosition.x,centerY - cameraPosition.y,canvasDrawData.width,canvasDrawData.height)
+                }
                 if(canvasDrawData.opacity){
                     context.globalAlpha = 1
                 }
@@ -889,15 +913,15 @@ const drawFromPosition = (type,bounds,cameraPosition,reset = true) => {
         }
 
     })
-
-    ElementsAddedToScene.filter(e => !e.passive && e.canvasDrawData &&
-        e.canvasDrawData.position.x + 50 >= Camera.bounds.p1.x &&
-        e.canvasDrawData.position.x - 50 <= Camera.bounds.p2.x &&
-        e.canvasDrawData.position.y + 50 >= Camera.bounds.p1.y &&
-        e.canvasDrawData.position.y - 50 <= Camera.bounds.p2.y
-    ).forEach(e => objectsInView.push(e))
-
-    Camera.objectsInView = objectsInView
+    if(type === "main") {
+        ElementsAddedToScene.filter(e => !e.passive && e.canvasDrawData &&
+            e.canvasDrawData.position.x + 50 >= Camera.bounds.p1.x &&
+            e.canvasDrawData.position.x - 50 <= Camera.bounds.p2.x &&
+            e.canvasDrawData.position.y + 50 >= Camera.bounds.p1.y &&
+            e.canvasDrawData.position.y - 50 <= Camera.bounds.p2.y
+        ).forEach(e => objectsInView.push(e))
+        Camera.objectsInView = objectsInView
+    }
 }
 
 const drawForCamera = (type,cameraPosition) => {
@@ -1300,7 +1324,7 @@ const main = () => {
         const collisions = []
         for(let i = 0;i < Camera.objectsInView.length;i++){
             const currentObject = Camera.objectsInView[i]
-            if(currentObject._id !== component._id && currentObject.physics.collision.collide) {
+            if(currentObject._id !== component._id && currentObject.physics.collision.collide && !currentObject.isBackground) {
                 if(component.physics && typeof component.physics.collision.notCollideWith === "function" && component.physics.collision.notCollideWith(currentObject)) {
                     continue
                 }
@@ -1384,15 +1408,34 @@ const main = () => {
                 collisionsElement.forEach(collision => {
                     component.onCollision(collision)
                 })
-
-
         }
 
     }
 
-    const applyPhysics = () => {
+    const applyPhysics = t => {
+
+        const computeFall = sceneElement => {
+            if (sceneElement.physics.fallTimer === undefined) {
+                sceneElement.physics.fallTimer = Date.now()
+                sceneElement.physics.fallY = sceneElement.canvasDrawData.position.y
+            }
+            const elapsedTime = Date.now() - sceneElement.physics.fallTimer
+
+            let fallDistance = Math.abs(sceneElement.canvasDrawData.position.y - sceneElement.physics.fallY)
+
+            let speed = Math.sqrt(2 * 9.81 * (fallDistance === 0 ? 1 : fallDistance))
+            if(sceneElement.physics.velocityY && sceneElement.physics.velocityY < 0){
+                sceneElement.physics.velocityY += speed
+                speed = -speed
+                sceneElement.physics.fallY = sceneElement.canvasDrawData.position.y + sceneElement.physics.velocityY
+            }
+            sceneElement.physics.vy = speed
+            sceneElement.canvasDrawData.position.y = float2int(sceneElement.physics.fallY + (speed * sceneElement.physics.weight) * (elapsedTime / 1000))
+        }
         //Apply the physics on active objects
-        const t = ElementsAddedToScene.filter(e => e.passive === false)
+
+
+        t = t.filter(e => e.passive === false)
         t.forEach(sceneElement => {
             const componentLastPosition = lastPositions.find(e => sceneElement._id === e._id)
             if(!componentLastPosition){
@@ -1412,76 +1455,61 @@ const main = () => {
                         if(typeof sceneElement.onCollision === 'function')
                             sceneElement.onCollision(false)
 
-                        if (sceneElement.physics.fallTimer === undefined) {
-                            sceneElement.physics.fallTimer = Date.now()
-                            sceneElement.physics.fallY = sceneElement.canvasDrawData.position.y
-                        }
-                        const elapsedTime = Date.now() - sceneElement.physics.fallTimer
-
-                        let fallDistance = Math.abs(sceneElement.canvasDrawData.position.y - sceneElement.physics.fallY)
-
-                        let speed = Math.sqrt(2 * 9.81 * (fallDistance === 0 ? 1 : fallDistance))
-                        if(sceneElement.physics.velocityY && sceneElement.physics.velocityY < 0){
-                            sceneElement.physics.velocityY += speed
-                            speed = -speed
-                            sceneElement.physics.fallY = sceneElement.canvasDrawData.position.y + sceneElement.physics.velocityY
-                        }
-                        sceneElement.physics.vy = speed
-                        sceneElement.canvasDrawData.position.y = float2int(sceneElement.physics.fallY + (speed * sceneElement.physics.weight) * (elapsedTime / 1000))
-
+                        computeFall(sceneElement)
                     }
                     beforeUpdatingComponent(sceneElement)
                 }else if(sceneElement.physics.weight > 0){
                     if(sceneElement.physics.velocityY) {
-                        if (sceneElement.physics.fallTimer === undefined) {
-                            sceneElement.physics.fallTimer = Date.now()
-                            sceneElement.physics.fallY = sceneElement.canvasDrawData.position.y
-                        }
-                        const elapsedTime = Date.now() - sceneElement.physics.fallTimer
-
-                        let fallDistance = Math.abs(sceneElement.canvasDrawData.position.y - sceneElement.physics.fallY)
-
-                        let speed = Math.sqrt(2 * 9.81 * (fallDistance === 0 ? 1 : fallDistance))
-                        if(sceneElement.physics.velocityY && sceneElement.physics.velocityY < 0){
-                            sceneElement.physics.velocityY += speed
-                            speed = -speed
-                            sceneElement.physics.fallY = sceneElement.canvasDrawData.position.y + sceneElement.physics.velocityY
-                        }
-                        sceneElement.physics.vy = speed
-                        sceneElement.canvasDrawData.position.y = float2int(sceneElement.physics.fallY + (speed * sceneElement.physics.weight) * (elapsedTime / 1000))
+                        computeFall(sceneElement)
                         //beforeUpdatingComponent(sceneElement)
                     }
                 }
 
             }
         })
-        drawComponent(t)
-        drawComponent(ElementsAddedToScene.filter(e => e.layer === "globalLightning"),"globalLightning")
     }
 
-    const updateComponents = () => {
-        for(let i = 0;i < ElementsAddedToScene.length; i++){
-            if(typeof ElementsAddedToScene[i].onUpdate === 'function'){
-                const component = ElementsAddedToScene[i]
-                if(component && component.canvasDrawData){
-                    component.beforeUpdate = JSON.parse(JSON.stringify(component.canvasDrawData))
-                    const f = new Force(component)
-                    component.onUpdate(ElementsAddedToScene[i].canvasDrawData,f)
+    const updateLayers = components => {
+        const props = components.reduce((acc, obj) => {
+            let key = obj.layer
+            if(key === undefined)
+                key = "dynamic"
+            acc[key] = acc[key] || []
+            acc[key].push(obj)
+            return acc
+        }, {})
 
-                    if(component.layer === "globalLightning"){
-                        continue
-                    }
+        //REWORK HERE TO DRAW ON EVERY LAYER IF !PASSIVE
+        //!PASSIVE = onUpdate() IN THE OBJECT
 
-                    beforeUpdatingComponent(component)
+        canvas.forEach(c => {
+            if(c.name !== "main" && c.name !== "background")
+                drawComponent(props[c.name] || [],c.name)
+        })
+
+    }
+
+    const updateComponents = components => {
+        components.forEach(component => {
+            if(component && typeof component.onUpdate === "function" && component.canvasDrawData){
+                component.beforeUpdate = JSON.parse(JSON.stringify(component.canvasDrawData))
+                const f = new Force(component)
+                component.onUpdate(component.canvasDrawData,f)
+
+                if(component.layer === "globalLightning"){
+                    return
                 }
 
+                beforeUpdatingComponent(component)
             }
-        }
+        })
     }
 
     const onFrameCallback = () => {
-        applyPhysics()
-        updateComponents()
+        const elements = ElementsAddedToScene.filter(e => e.passive === false || typeof e.onUpdate === "function")
+        applyPhysics(elements)
+        updateComponents(elements)
+        updateLayers(elements)
     }
 
     const onFrameRefresh = (time) => {
