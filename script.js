@@ -398,7 +398,7 @@ rain.vy = 0
 //rain.play(true)
 
 let time = 0
-const daySpeed = 0.001
+const daySpeed = 0.00001
 
 const getNightOverlayAlpha = time => {
     return Math.min(1 - Math.cos(time * 2 * Math.PI),0.95)
@@ -424,11 +424,12 @@ new BackgroundComponent("background-overlay",-2,canvas => ({
     height:canvas.height,
     width:canvas.width,
     position:new Vector2(0,0),
-    backgroundColor:"rgba(0, 0, 0, 0)"
+    backgroundColor:"rgba(0, 0, 0, 0)",
+    isFixed:true,
 }),{
     onUpdate:transform => {
-        transform.position.y = Camera.bounds.p1.y - 50
-        transform.position.x = Camera.bounds.p1.x - 50
+        //transform.position.y = Camera.bounds.p1.y - 50
+        //transform.position.x = Camera.bounds.p1.x - 50
         transform.backgroundColor = `rgba(0, 0, 0, ${getNightOverlayAlpha(time)})`
     }
 })
@@ -570,7 +571,7 @@ AddToScene({
     hasMoved:false,
     canvas:() => ({
         type:"Sprite",
-        position:new Vector2(0,100),
+        position:new Vector2(0,0),
         sprite:spriteChar,
         scale:0.5,
     }),

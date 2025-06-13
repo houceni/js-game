@@ -145,17 +145,16 @@ const GlobalLightning = {
                     const c = -(canvas.height / 2) - 50
                     return {
                         type: "rect",
-                        position:new Vector2(-(canvas.width / 2) - 50,c),
+                        position:new Vector2(-50,-50),
                         width: canvas.width + 100,
-                        height: canvas.height + 100
+                        height: canvas.height + 100,
+                        isFixed:true
                     }
                 },
                 onUpdate:transform => {
                     if(typeof this.update === "function"){
                         this.update(transform)
                     }
-                    transform.position.y = Camera.bounds.p1.y - 50
-                    transform.position.x = Camera.bounds.p1.x - 50
                 },
                 physics: {
                     weight: 0,
@@ -226,13 +225,16 @@ const Grid = function(canvasDrawData,children,metaData = {}){
 
     this.removeMultiples = tiles => {
         tiles.forEach(tile => {
-            const index = ElementsAddedToScene.findIndex(e => e._id === tile._id)
-            if(index !== -1) {
-                const tileIndex = this.tiles.findIndex(e => e._id === tile._id)
-                if (tileIndex !== -1)
-                    this.tiles.splice(tileIndex, 1)
-                ElementsAddedToScene.splice(index, 1)
+            if(tile && tile._id){
+                const index = ElementsAddedToScene.findIndex(e => e._id === tile._id)
+                if(index !== -1) {
+                    const tileIndex = this.tiles.findIndex(e => e._id === tile._id)
+                    if (tileIndex !== -1)
+                        this.tiles.splice(tileIndex, 1)
+                    ElementsAddedToScene.splice(index, 1)
+                }
             }
+
         })
         drawForCamera("main")
     }
@@ -890,7 +892,6 @@ const drawFromPosition = (type,bounds,cameraPosition,reset = true) => {
                     context.globalAlpha = canvasDrawData.opacity
                 }
                 if(canvasDrawData.isFixed){
-                    console.log('HERE')
                     context.drawImage(canvasDrawData.isMirror ? canvasDrawData.image.getMirror() : canvasDrawData.image.loadedImage,centerX,centerY,canvasDrawData.width,canvasDrawData.height)
                 }else{
                     context.drawImage(canvasDrawData.isMirror ? canvasDrawData.image.getMirror() : canvasDrawData.image.loadedImage,centerX - cameraPosition.x,centerY - cameraPosition.y,canvasDrawData.width,canvasDrawData.height)
@@ -979,10 +980,10 @@ const isInCameraBounds = (component,canvasDrawData) => {
         )
     }
     return (
-        canvasDrawData.position.x >= Camera.bounds.p1.x &&
-        canvasDrawData.position.x <= Camera.bounds.p2.x &&
-        canvasDrawData.position.y >= Camera.bounds.p1.y &&
-        canvasDrawData.position.y <= Camera.bounds.p2.y
+        canvasDrawData.position.x >= Camera.bounds.p1.x - 100 &&
+        canvasDrawData.position.x <= Camera.bounds.p2.x + 100 &&
+        canvasDrawData.position.y >= Camera.bounds.p1.y - 100 &&
+        canvasDrawData.position.y <= Camera.bounds.p2.y + 100
     )
 }
 
@@ -1082,7 +1083,7 @@ const drawComponents = (type = "main",first = true,child) => {
 
             const cameraPosition = Camera.getPosition()
 
-            if(isInCameraBounds(computedCanvasDrawData.component,canvasDrawData) || type === "globalLightning"){
+            if(isInCameraBounds(computedCanvasDrawData.component,canvasDrawData) || canvasDrawData.isFixed){
 
                 context.beginPath()
 
@@ -1090,7 +1091,11 @@ const drawComponents = (type = "main",first = true,child) => {
                     const radius = canvasDrawData.radius
                     context[canvasDrawData.type](computedCanvasDrawData.centerX - cameraPosition.x, computedCanvasDrawData.centerY - cameraPosition.y, radius, canvasDrawData.startAngle, canvasDrawData.endAngle, false)
                 }else if(canvasDrawData.type === "rect" || canvasDrawData.type === "Grid" || canvasDrawData.type === "Tile"){
-                    context.rect(computedCanvasDrawData.centerX - cameraPosition.x, computedCanvasDrawData.centerY - cameraPosition.y, computedCanvasDrawData.width || canvasDrawData.width,computedCanvasDrawData.height || canvasDrawData.height)
+                    if(canvasDrawData.isFixed){
+                        context.rect(computedCanvasDrawData.centerX, computedCanvasDrawData.centerY, computedCanvasDrawData.width || canvasDrawData.width,computedCanvasDrawData.height || canvasDrawData.height)
+                    }else{
+                        context.rect(computedCanvasDrawData.centerX - cameraPosition.x, computedCanvasDrawData.centerY - cameraPosition.y, computedCanvasDrawData.width || canvasDrawData.width,computedCanvasDrawData.height || canvasDrawData.height)
+                    }
                 }else if(canvasDrawData.type === "Sprite"){
                     //sprite handling
                     const image = canvasDrawData.sprite.onLoad(canvasDrawData.isMirror === true)
