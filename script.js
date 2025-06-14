@@ -189,19 +189,22 @@ const emptyTile = () => ({
 const grassTile = () => ({
     type:"Grass",
     image:null,
-    health:1
+    health:1,
+    dropItem:"Dirt"
 })
 
 const dirtTile = () => ({
     type:"Dirt",
     image:null,
-    health:2
+    health:2,
+    dropItem:"Dirt"
 })
 
 const stoneTile = () => ({
     type:"Stone",
     image: null,
-    health:4
+    health:4,
+    dropItem:"Stone"
 })
 
 
@@ -506,7 +509,7 @@ const placeItem = mousePosition => {
         let x = float2int(Camera.bounds.p1.x + mousePosition.x - (grid.component.canvasDrawData.tileSize / 2))
         let y = float2int(float2int(Camera.bounds.p1.y) + mousePosition.y)
 
-        AddToScene({
+        const addedTorch = AddToScene({
             lastTime:0,
             canvas:() => ({
                 type:"Sprite",
@@ -538,13 +541,15 @@ const placeItem = mousePosition => {
                 })]
             },
             passive: false,
-            layer:"dynamic",
-            tileType:"Torch"
+            tileType:"Torch",
+            layer:"dynamic"
         },true)
         const newTile = new Tile({
             position: new Vector2(currentPosition.x, currentPosition.y)
         },{
-            tileType:"Attached"
+            tileType:"Attached",
+            health:Item.all.Torch.health,
+            attachedComponent:addedTorch
         })
         grid.SetTile(newTile)
         InventoryManager.decreaseCurrentSlot()
@@ -554,8 +559,8 @@ const placeItem = mousePosition => {
             position: currentPosition,
             image:item.resource
         },{
-            tileType:"Plank",
-            health:3
+            tileType:item.name,
+            health:item.health
         })
         tile.physics.collision.collide = true
         grid.SetTile(
@@ -573,7 +578,7 @@ AddToScene({
         type:"Sprite",
         position:new Vector2(0,0),
         sprite:spriteChar,
-        scale:0.5,
+        scale:0.5
     }),
     physics: {
         weight: 6,
@@ -657,12 +662,8 @@ AddToScene({
             }
             spriteChar.playOnce("attack")
             if(newTile){
-                if(newTile.tileType === "Stone"){
-                    particles.setBackgroundColor("#666862")
-                }else if(newTile.tileType === "Grass" || newTile.tileType === "Leaf"){
-                    particles.setBackgroundColor("#3d5116")
-                }else{
-                    particles.setBackgroundColor("#744A27")
+                if(Item.all[newTile.tileType]){
+                    particles.setBackgroundColor(Item.all[newTile.tileType].particlesColor)
                 }
                 particles.setPosition(new Vector2(newTile.canvasDrawData.position.x,newTile.canvasDrawData.position.y))
                 particles.play()
@@ -749,7 +750,8 @@ const grid = new Grid((canvas) => ({
                     image:getResourceByType(generatedMap[col][row].type)
                 },{
                     tileType:generatedMap[col][row].type,
-                    health:generatedMap[col][row].health
+                    health:generatedMap[col][row].health,
+                    dropItem:generatedMap[col][row].dropItem
                 })
                 tile.physics.collision.collide = true
                 tiles.push(tile)
@@ -859,42 +861,57 @@ const grid = new Grid((canvas) => ({
 const DamageTile = tile => {
     if(tile.health > 0) {
         tile.health--
-        if(tile.health === 0){
+        if(tile.health <= 0){
             const tilesToRemove = []
             tilesToRemove.push(tile)
 
-            if(tile.tileType === "Wood" || tile.tileType === "Plank"){
-                //ChopTree(tilePosition,resourceObject.gameObject);
-                let x = tile.canvasDrawData.gridPosition.x
+            let itemToSpawn = null
 
+            if(tile.tileType === "Attached"){
+                if(Item.all[tile.attachedComponent.tileType] && Item.all[tile.attachedComponent.tileType].dropItem) {
+                    itemToSpawn = Item.all[tile.attachedComponent.tileType]
+                    Destroy(ElementsAddedToScene.find(e => e.layer === "globalLightning" && e.parent && e.parent._id === tile.attachedComponent._id))
+                    Destroy(tile.attachedComponent)
+                }
+            }else if(Item.all[tile.tileType] && Item.all[tile.tileType].dropItem) {
+                itemToSpawn = Item.all[tile.tileType]
+            }
+
+            if(itemToSpawn){
                 AddToScene({
-                    canvas:() => ({
-                        type:"Sprite",
-                        position:new Vector2(tile.canvasDrawData.position.x,tile.canvasDrawData.position.y),
-                        sprite:spriteItem,
-                        scale:0.8,
-                        height:32,
-                        width:32,
+                    canvas: () => ({
+                        type: "Sprite",
+                        position: new Vector2(tile.canvasDrawData.position.x, tile.canvasDrawData.position.y),
+                        sprite: itemToSpawn.sprite,
+                        scale: 0.3
                     }),
                     physics: {
                         weight: 4,
                         collision: {
                             collide: true,
                             isFixed: false,
-                            collideBox:{
-                                y:4,
-                                x:null,
-                                width:28,
-                                height:20,
+                            collideBox: {
+                                y: 0,
+                                x: null,
+                                width: 20,
+                                height: 20,
                                 display: false
                             },
-                            notCollideWith:component => component.isItem || component.isPlayer
+                            notCollideWith: component => component.isItem || component.isPlayer
                         }
                     },
                     passive: false,
-                    isItem:true,
-                    itemType:"Wood"
-                },true)
+                    isItem: true,
+                    itemType: itemToSpawn.dropItem
+                }, true)
+            }
+
+
+            if(tile.tileType === "Wood" || tile.tileType === "Plank"){
+                //ChopTree(tilePosition,resourceObject.gameObject);
+                let x = tile.canvasDrawData.gridPosition.x
+
+
 
                 if(tile.tileType === "Wood"){
                     const woodTiles = grid.tiles.filter(t => t.tileType === "Wood" && t.canvasDrawData.gridPosition.x === x)

@@ -172,16 +172,15 @@ const GlobalLightning = {
     }
 }
 
-const Background = {
-    resource:null,
-    setBackground:resource => {
-        Background.resource = resource
-    }
-}
-
 const Destroy = component => {
     const i = ElementsAddedToScene.findIndex(e => e._id === component._id)
     if(i !== -1) {
+        if(ElementsAddedToScene[i].parent && ElementsAddedToScene[i].parent.grid){
+            const gridIndex = ElementsAddedToScene[i].parent.grid.tiles.findIndex(e => e._id === component.id)
+            if(gridIndex !== -1){
+                ElementsAddedToScene[i].parent.grid.tiles.splice(gridIndex,1)
+            }
+        }
         ElementsAddedToScene.splice(i, 1)
         return true
     }
@@ -196,7 +195,7 @@ const Grid = function(canvasDrawData,children,metaData = {}){
 
     this.SetTile = tile => {
         const addedTile = AddToScene(tile,true,this.component)
-        this.tiles.push(addedTile)
+        this.tiles.push(ElementsAddedToScene.find(e => e._id === addedTile._id))
         drawForCamera("main")
     }
 
@@ -229,8 +228,10 @@ const Grid = function(canvasDrawData,children,metaData = {}){
                 const index = ElementsAddedToScene.findIndex(e => e._id === tile._id)
                 if(index !== -1) {
                     const tileIndex = this.tiles.findIndex(e => e._id === tile._id)
-                    if (tileIndex !== -1)
+                    if (tileIndex !== -1) {
+                        this.tiles[tileIndex].isDestroyed = true
                         this.tiles.splice(tileIndex, 1)
+                    }
                     ElementsAddedToScene.splice(index, 1)
                 }
             }
@@ -1045,8 +1046,9 @@ const computeCanvasDrawData = (component,parent) => {
         if(canvasDrawData.type === "Sprite"){
             //sprite handling
             const image = canvasDrawData.sprite.onLoad(canvasDrawData.isMirror === true)
-            canvasDrawData.width = image.image.width * (canvasDrawData.scale || 1)
+            const imageWidth = image.image.width
             canvasDrawData.height = image.image.height * (canvasDrawData.scale || 1)
+            canvasDrawData.width = imageWidth * (canvasDrawData.scale || 1)
         }
 
         component.canvasDrawData = canvasDrawData
@@ -1446,16 +1448,20 @@ const main = () => {
             if(!componentLastPosition){
                 lastPositions.push({
                     _id:sceneElement._id,
-                    position:new Vector2(0,0)
+                    position:new Vector2(0,0),
+                    collisionElement:null
                 })
             }
             if(!componentLastPosition || componentLastPosition.position.x !== sceneElement.canvasDrawData.position.x ||
-                componentLastPosition.position.y !== sceneElement.canvasDrawData.position.y || sceneElement.physics.fallTimer || sceneElement.physics.velocityY){
+                componentLastPosition.position.y !== sceneElement.canvasDrawData.position.y || sceneElement.physics.fallTimer || sceneElement.physics.velocityY || (!componentLastPosition.collisionElement || componentLastPosition.collisionElement.isDestroyed)){
                 if(componentLastPosition){
                     componentLastPosition.position = new Vector2(sceneElement.canvasDrawData.position.x,sceneElement.canvasDrawData.position.y)
                 }
                 if(sceneElement.physics.weight > 0 && sceneElement.physics.collision.collide){
                     const collisionsElement = detectCollision(sceneElement)
+                    if(collisionsElement){
+                        componentLastPosition.collisionElement = collisionsElement[0].component
+                    }
                     if(!collisionsElement || sceneElement.physics.velocityY) {
                         if(typeof sceneElement.onCollision === 'function')
                             sceneElement.onCollision(false)
