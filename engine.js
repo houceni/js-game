@@ -9,7 +9,7 @@ Math.Range = function(min,max){
 }
 
 function lerp(a, b, t) {
-    return a + (b - a) * t;
+    return a + (b - a) * t
 }
 
 const drawData = {
@@ -187,16 +187,79 @@ const Destroy = component => {
     return false
 }
 
+const World = {
+    getPositionFromMousePosition: mousePosition => {
+        if(!mousePosition)
+            mousePosition = new Vector2(MousePosition.x,MousePosition.y)
+        let x = float2int(Camera.bounds.p1.x + mousePosition.x)
+        let y = float2int(float2int(Camera.bounds.p1.y) + mousePosition.y)
+        return new Vector2(x,y)
+
+    }
+}
+
+const IA = function(GameObject){
+
+    this.gameObject = GameObject
+
+    this.movement = 0.22
+
+    this.followingObject = null
+
+    this.Follow = g => {
+        this.followingObject = g
+    }
+
+    this.gameObject.onUpdate = (transform,force) => {
+        if(this.followingObject){
+
+            if(this.followingObject.canvasDrawData.position.x > this.gameObject.canvasDrawData.position.x){
+                transform.position.x += this.movement * DeltaTime
+            }else{
+                transform.position.x -= this.movement * DeltaTime
+            }
+
+        }
+    }
+
+}
+//let b = 1
 const Grid = function(canvasDrawData,children,metaData = {}){
+
+    this.gridTiles = []
 
     this.tiles = []
 
     this.component = {}
 
+    this.startingX = 0
+
+    this.startingY = 0
+
     this.SetTile = tile => {
         const addedTile = AddToScene(tile,true,this.component)
-        this.tiles.push(ElementsAddedToScene.find(e => e._id === addedTile._id))
+        this.pushTile(ElementsAddedToScene.find(e => e._id === addedTile._id))
         drawForCamera("main")
+    }
+
+    this.pushTile = tile => {
+        this.tiles.push(tile)
+        if(tile.canvasDrawData.gridPosition.x < this.startingX)
+            this.startingX = tile.canvasDrawData.gridPosition.x
+
+        if(tile.canvasDrawData.gridPosition.y < this.startingY)
+            this.startingY = tile.canvasDrawData.gridPosition.y
+    }
+
+    this.computeGridTiles = () => {
+        this.tiles.forEach(tile => {
+            const position = new Vector2(tile.canvasDrawData.gridPosition.x - this.startingX,tile.canvasDrawData.gridPosition.y - this.startingY)
+            if(!this.gridTiles[position.y]){
+                this.gridTiles[position.y] = []
+            }
+
+            this.gridTiles[position.y][position.x] = tile
+        })
     }
 
     this.removeTileAt = position => {
@@ -584,6 +647,9 @@ function Sprite(){
         const currentTime = Date.now()
         let nextFrame = this.currentFrame
         if(currentTime > this.lastFrameTime + spriteSheet.timeBetweenFrames){
+            if(typeof spriteSheet.sprites[nextFrame].event=== "function"){
+                spriteSheet.sprites[nextFrame].event()
+            }
             this.lastFrameTime = currentTime
 
             nextFrame = this.currentFrame + 1
@@ -600,11 +666,7 @@ function Sprite(){
                     this.currentSet = this.defaultSet
                 }
             }
-
             this.currentFrame = nextFrame
-            if(typeof spriteSheet.sprites[nextFrame].event=== "function"){
-                spriteSheet.sprites[nextFrame].event()
-            }
         }
 
         const i = this.images.find(e => e._id === spriteSheet.sprites[nextFrame]._id && e.type === (isMirror ? "mirror" : "normal"))
@@ -614,8 +676,6 @@ function Sprite(){
                 image:i.image
             }
         }
-
-
 
     }
 
@@ -669,6 +729,8 @@ const Camera = {
     followObject:null,
     dynamicCanvas:null,
     objectsInView:[],
+    gridTileSize:0,
+    lastDrawPosition:new Vector2(0,0),
     bounds:{
         p1:Vector2,
         p2:Vector2,
@@ -678,6 +740,12 @@ const Camera = {
     addedToScene:false,
     follow:function(gameObject){
         Camera.followObject = gameObject
+        const grid = ElementsAddedToScene.find(e => e && e.canvasDrawData && e.canvasDrawData.type === "Grid")
+        if(grid){
+            Camera.gridTileSize = grid.canvasDrawData.tileSize
+        }
+        if(isNaN(Camera.gridTileSize))
+            Camera.gridTileSize = 0
     },
     setPosition:function(position){
         if(position instanceof Vector2) {
@@ -738,12 +806,24 @@ const Camera = {
                 Camera.bounds.p1 = new Vector2( objectPosition.x - screenX,objectPosition.y - screenY)
                 Camera.bounds.p2 = new Vector2((objectPosition.x - screenX) + dynamicCanvas.width, (objectPosition.y - screenY) + dynamicCanvas.height)
                 //We do a soft draw without all the calculation
+                //REWORK HERE, DRAW ONLY USING GRID POSITION
                 drawForCamera("main",newPosition)
                 BackgroundComponent.components.forEach(c => {
                     if(!c.component.component.onUpdate) {
                         drawForCamera(c.name, newPosition)
                     }
                 })
+                if(
+                    Math.abs(Math.abs(Camera.lastDrawPosition.x) - Math.abs(objectPosition.x)) > Camera.gridTileSize
+                    ||
+                    Math.abs(Math.abs(Camera.lastDrawPosition.y) - Math.abs(objectPosition.y)) > Camera.gridTileSize
+                ){
+                    //console.log(Camera.lastDrawPosition,objectPosition)
+
+                    Camera.lastDrawPosition = new Vector2(objectPosition.x,objectPosition.y)
+                    //console.log("drawing...")
+                }
+
                 Camera.lastObjectPosition = new Vector2(objectPosition.x,objectPosition.y)
                 Camera.position = newPosition
             }
@@ -861,14 +941,12 @@ const drawFromPosition = (type,bounds,cameraPosition,reset = true) => {
             }
         }
 
-
         if(
             (canvasDrawData.position.x + 50 >= bounds.p1.x &&
             canvasDrawData.position.x - 50 <= bounds.p2.x &&
             canvasDrawData.position.y + 50 >= bounds.p1.y &&
-            canvasDrawData.position.y - 50 <= bounds.p2.y)
-
-            || (canvasDrawData.isFixed)
+            canvasDrawData.position.y - 50 <= bounds.p2.y) ||
+            canvasDrawData.isFixed
         ){
             context.beginPath()
             const centerX = canvasDrawData.position.x
@@ -900,6 +978,14 @@ const drawFromPosition = (type,bounds,cameraPosition,reset = true) => {
                 if(canvasDrawData.opacity){
                     context.globalAlpha = 1
                 }
+            }
+
+            if(e.physics.collision.collideBox && e.physics.collision.collideBox.display === true){
+                const collideBounds = getCollideBoxBounds(e,canvasDrawData)
+                context.rect(collideBounds.x - cameraPosition.x, collideBounds.y - cameraPosition.y, collideBounds.width,collideBounds.height)
+                context.lineWidth = 1
+                context.strokeStyle = "#be02cc"
+                context.stroke()
             }
             if(canvasDrawData.fillStyle || canvasDrawData.backgroundColor){
                 context.fillStyle = canvasDrawData.fillStyle || canvasDrawData.backgroundColor
@@ -1077,8 +1163,6 @@ const drawComponents = (type = "main",first = true,child) => {
 
         if(typeof e === 'object' && typeof e.canvas === 'function'){
 
-
-
             const computedCanvasDrawData = computeCanvasDrawData(e,parent)
 
             const canvasDrawData = computedCanvasDrawData.component.canvasDrawData
@@ -1174,6 +1258,10 @@ const drawComponents = (type = "main",first = true,child) => {
 
                 if(computedCanvasDrawData.component.physics.collision.collideBox && computedCanvasDrawData.component.physics.collision.collideBox.display === true){
                     const collideBounds = getCollideBoxBounds(computedCanvasDrawData.component,canvasDrawData)
+                    if(e.parent){
+                        collideBounds.x += e.parent.canvasDrawData.position.x
+                        collideBounds.y += e.parent.canvasDrawData.position.y
+                    }
                     context.rect(collideBounds.x - cameraPosition.x, collideBounds.y - cameraPosition.y, collideBounds.width,collideBounds.height)
                     context.lineWidth = 1
                     context.strokeStyle = "#be02cc"
@@ -1196,7 +1284,6 @@ const drawComponents = (type = "main",first = true,child) => {
             computedCanvasDrawData.component.canvasDrawData = canvasDrawData
 
             if(typeof e.children === 'function' && first) {
-                console.log(e)
                 e.children().forEach(c => {
                     c._id = Math.random().toString(36).substring(2,14)
                     c._toUpdate = {
@@ -1205,9 +1292,11 @@ const drawComponents = (type = "main",first = true,child) => {
                     ElementsAddedToScene.push(c)
                     onAddedToScene(c,e)
                     if(e.grid){
-                        e.grid.tiles.push(c)
+                        e.grid.pushTile(c)
                     }
                 })
+                if(e.grid)
+                    e.grid.computeGridTiles()
             }
         }
     }
@@ -1250,9 +1339,9 @@ const getCanvas = name => canvas.find(e => e.name === name)
 
 const main = () => {
 
-    let lastTime = 0;
-    const fps = 60;
-    const interval = 1000 / fps;
+    let lastTime = 0
+    const fps = 60
+    const interval = 1000 / fps
 
     const lastPositions = []
 
@@ -1320,7 +1409,7 @@ const main = () => {
         return (
             collidingBox1.v1.x < collidingBox2.v2.x &&
             collidingBox1.v2.x > collidingBox2.v1.x &&
-            collidingBox1.v1.y < collidingBox2.v4.y &&
+            collidingBox1.v1.y - 2 < collidingBox2.v4.y &&
             collidingBox1.v4.y > collidingBox2.v1.y - 2
         )
     }
@@ -1351,7 +1440,7 @@ const main = () => {
         return false
     }
 
-    const getCollisionSide = (a, b) => {
+    const getCollisionSide = (a, b,bool) => {
 
         const dx = (a.position.x + a.width / 2) - (b.position.x + b.width / 2)
         const dy = (a.position.y + a.height / 2) - (b.position.y + b.height / 2)
@@ -1360,6 +1449,11 @@ const main = () => {
 
         const crossWidth = width * dy
         const crossHeight = height * dx
+
+        if(bool){
+            //console.log(Math.abs(dx),width,Math.abs(dy),height)
+        }
+
 
         if (Math.abs(dx) <= width && Math.abs(dy) <= height) {
             if (crossWidth > crossHeight) {
@@ -1371,8 +1465,6 @@ const main = () => {
         return null
     }
 
-    const collides = []
-
     const beforeUpdatingComponent = component => {
         const collisionsElement = detectCollision(component)
         if(collisionsElement){
@@ -1380,41 +1472,48 @@ const main = () => {
 
             component.physics.fallTimer = undefined
             component.physics.fallY = component.canvasDrawData.position.y
-
-            if(sides.indexOf("left") !== -1 || sides.indexOf("right") !== -1){
-
-                if(component.beforeUpdate){
-                    component.canvasDrawData.position.x = component.beforeUpdate.position.x
-                }
-
-                if(sides.indexOf("left") !== -1)
-                    preventSide.left = true
-                if(sides.indexOf("right") !== -1)
-                    preventSide.right = true
-            }
             if(sides.indexOf("bottom") !== -1){
+
+                const collisionObject = collisionsElement.find(e => e.side === "bottom")
+                if(component.isPlayer){
+                    console.log(collisionObject)
+                }
                 component.physics.velocityY = 0
                 if(component.canvasDrawData.type === "arc")
-                    component.canvasDrawData.position.y = collisionsElement[0].collidingBox.v1.y - component.canvasDrawData.radius
+                    component.canvasDrawData.position.y = collisionObject.collidingBox.v1.y - component.canvasDrawData.radius
                 else if(component.canvasDrawData.type === "Sprite") {
                     //console.log(collisionElement.collidingBox.v1.y,sceneElement.canvasDrawData.height)
-                    component.canvasDrawData.position.y = collisionsElement[0].collidingBox.v1.y - component.canvasDrawData.height
+                    component.canvasDrawData.position.y = collisionObject.collidingBox.v1.y - component.canvasDrawData.height
                 }
                 component.physics.fallY = component.canvasDrawData.position.y
 
             }
             if(sides.indexOf("top") !== -1){
+                const collisionObject = collisionsElement.find(e => e.side === "top")
                 if(component.canvasDrawData.type === "arc")
-                    component.canvasDrawData.position.y = collisionsElement[0].collidingBox.v1.y + component.canvasDrawData.radius
+                    component.canvasDrawData.position.y = collisionObject.collidingBox.v1.y + component.canvasDrawData.radius
                 else if(component.canvasDrawData.type === "Sprite") {
                     //console.log(collisionElement.collidingBox.v1.y,sceneElement.canvasDrawData.height)
-                    component.canvasDrawData.position.y = collisionsElement[0].collidingBox.v1.y + component.canvasDrawData.height / 2
+                    console.log(collisionObject)
+                    component.canvasDrawData.position.y = collisionObject.collidingBox.v1.y + component.canvasDrawData.height / 2
                 }
             }
+
+            if(sides.indexOf("left") !== -1 || sides.indexOf("right") !== -1){
+                console.log("SIDES")
+                if(component.beforeUpdate){
+                    if(sides.indexOf("left") !== -1){
+                        component.canvasDrawData.position.x = component.beforeUpdate.position.x + 2
+                    }else{
+                        component.canvasDrawData.position.x = component.beforeUpdate.position.x - 2
+                    }
+                    Input.horizontalAxis = 0
+                }
+
+            }
+
             if(typeof component.onCollision === 'function')
-                collisionsElement.forEach(collision => {
-                    component.onCollision(collision)
-                })
+                component.onCollision(collisionsElement.filter(e => e.side))
         }
 
     }

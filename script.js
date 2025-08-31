@@ -1,6 +1,10 @@
 import {Item} from "./js/Items"
 import {resources} from "./js/Resources"
-import {InventoryManager} from "./js/InventoryManager";
+import {InventoryManager} from "./js/InventoryManager"
+import {ZombieSprite} from "./js/Sprites"
+
+let displayCraftWindow = false
+let scrollTimeOut = null
 
 document.addEventListener("DOMContentLoaded",() => {
     InventoryManager.build()
@@ -9,20 +13,64 @@ document.addEventListener("DOMContentLoaded",() => {
     InventoryManager.addItem(Item.all.Torch)
 })
 
+
 window.addEventListener("wheel", e => {
     e.preventDefault()
-    if (e.deltaY < 0) {
-        InventoryManager.slotUp()
-    } else {
-        InventoryManager.slotDown()
+    if(!displayCraftWindow){
+        if (e.deltaY < 0) {
+            InventoryManager.slotUp()
+        } else {
+            InventoryManager.slotDown()
+        }
+    }else{
+        if(scrollTimeOut)
+            return
+
+
+        const isTop = e.deltaY < 0
+
+        const CraftListElement = document.getElementById("CraftList")
+        const scrollTop = CraftListElement.scrollTop
+        const scrollTopMax = CraftListElement.scrollHeight - CraftListElement.clientHeight
+        if(isTop && scrollTop === 0)
+            return
+        //console.log(Math.floor(scrollTopMax / 96) * 96,scrollTop)
+        if(Math.floor(scrollTopMax / 96) * 96 === scrollTop && !isTop)
+            return
+
+        scrollTimeOut = setTimeout(() => {
+            scrollTimeOut = null
+        },500)
+
+        CraftListElement.scrollTo({
+            top: !isTop ? scrollTop + 96 : scrollTop - 96,
+            left: 0,
+            behavior: "smooth",
+        })
     }
 }, { passive: false })
+
+window.addEventListener("keydown", e => {
+    if(e.key === "Tab" || e.key.toLowerCase() === "i"){
+        displayCraftWindow = !displayCraftWindow
+        toggleCraftWindow()
+    }
+})
+
+const toggleCraftWindow = () => {
+    const CraftWindowElement = document.getElementById("CraftWindow")
+    if(displayCraftWindow){
+        CraftWindowElement.classList.add("open")
+    }else{
+        CraftWindowElement.classList.remove("open")
+    }
+}
 
 const xLength = 500
 const yLength = 200
 const startingX = -25;
 
-const startingY = 0;
+const startingY = 30;
 const spriteChar = new Sprite()
 
 let focusedTile = null
@@ -68,13 +116,7 @@ spriteChar.set("move",[
 
 spriteChar.set("attack",[
     {
-        resource:"sprites/attack/sprite_attack_1.png"
-    },
-    {
-        resource:"sprites/attack/sprite_attack_2.png"
-    },
-    {
-        resource:"sprites/attack/sprite_attack_3.png",
+        resource:"sprites/attack/sprite_attack_1.png",
         event:() => {
             if(focusedTile && focusedTile.tileType === "Wood"){
                 AudioComponent.play(AudioResources.cut_tree)
@@ -84,6 +126,12 @@ spriteChar.set("attack",[
             }
 
         }
+    },
+    {
+        resource:"sprites/attack/sprite_attack_2.png"
+    },
+    {
+        resource:"sprites/attack/sprite_attack_3.png"
     },
     {
         resource:"sprites/attack/sprite_attack_4.png"
@@ -252,6 +300,47 @@ function getTileByType(type){
     return tile
 }
 
+const generateHouse = () => {
+    const tiles = []
+
+    const startY = 10
+    const startX = -10
+
+    for(let i = 0;i<20;i++){
+        tiles.push({
+            x:startX + i,
+            y:startY,
+            type:"WoodBlock"
+        })
+    }
+    for(let i = 1; i < 8;i++){
+        tiles.push({
+            x:startX,
+            y:startY + i,
+            type:"WoodBlock"
+        })
+
+        if(i < 5){
+            tiles.push({
+                x:startX + 19,
+                y:startY + i,
+                type:"WoodBlock"
+            })
+        }
+    }
+
+    for(let i = 0;i<20;i++){
+        tiles.push({
+            x:startX + i,
+            y:startY + 7,
+            type:"WoodBlock"
+        })
+    }
+
+    return tiles
+
+}
+
 const generateMap = () => {
     let map = []
     const firstBlockPositions = new Array(xLength)
@@ -295,8 +384,7 @@ const generateMap = () => {
 
     for (let i = 0; i < 6; i++)
     {
-        // string output = "";
-        let i = 0
+        //let i = 0
 
 
         for (let row = 0; row < yLength; row++)
@@ -359,9 +447,9 @@ const generateMap = () => {
                     }
 
 
-                    if(!newMap[col][row].type){
-                        return console.log('HERE')
-                    }
+                    //if(!newMap[col][row].type){
+                    //    return console.log('HERE')
+                    //}
                 }
 
 
@@ -370,7 +458,6 @@ const generateMap = () => {
         map = JSON.parse(JSON.stringify(newMap))
 
     }
-
 
     return newMap;
 }
@@ -401,7 +488,7 @@ rain.vy = 0
 //rain.play(true)
 
 let time = 0
-const daySpeed = 0.00001
+const daySpeed = 0.0001
 
 const getNightOverlayAlpha = time => {
     return Math.min(1 - Math.cos(time * 2 * Math.PI),0.95)
@@ -426,7 +513,7 @@ new BackgroundComponent("background-overlay",-2,canvas => ({
     type:"rect",
     height:canvas.height,
     width:canvas.width,
-    position:new Vector2(0,0),
+    position:new Vector2(-100,0),
     backgroundColor:"rgba(0, 0, 0, 0)",
     isFixed:true,
 }),{
@@ -477,22 +564,36 @@ const getClosestTile = (target, tiles) => {
 
 const placeItem = mousePosition => {
     const currentPosition = grid.getTilePositionFromMousePosition(mousePosition)
+    const item = InventoryManager.getCurrentItem()
+
     const nearTiles = grid.tiles.filter(t => {
         if(t.tileType === "Wood" || t.tileType === "Attached")
             return false
         const tile = t.canvasDrawData
-        return (tile.gridPosition.y === currentPosition.y + 1 && tile.gridPosition.x === currentPosition.x) ||
-            (tile.gridPosition.x === currentPosition.x - 1 && tile.gridPosition.y === currentPosition.y) ||
-            (tile.gridPosition.x === currentPosition.x + 1 && tile.gridPosition.y === currentPosition.y)
+
+        if(Array.isArray(item.checkSide)){
+            const checkValues = []
+            if(item.checkSide.indexOf("top") !== -1)
+                checkValues.push(tile.gridPosition.y === currentPosition.y - 1 && tile.gridPosition.x === currentPosition.x)
+            if(item.checkSide.indexOf("bottom") !== -1)
+                checkValues.push(tile.gridPosition.y === currentPosition.y + 1 && tile.gridPosition.x === currentPosition.x)
+            if(item.checkSide.indexOf("left") !== -1)
+                checkValues.push(tile.gridPosition.x === currentPosition.x - 1 && tile.gridPosition.y === currentPosition.y)
+            if(item.checkSide.indexOf("right") !== -1)
+                checkValues.push(tile.gridPosition.x === currentPosition.x + 1 && tile.gridPosition.y === currentPosition.y)
+
+            return checkValues.some(e => e)
+        }
+        return true
+
     })
 
-    const item = InventoryManager.getCurrentItem()
 
     if(nearTiles.length && !grid.getTileFromPosition(currentPosition) && item.name === "Torch"){
-        console.log(nearTiles)
+        //console.log(nearTiles)
         //find the closest tile and it's position compare to the selected one (bottom,left or right)
         const closestTile = getClosestTile(mousePosition,nearTiles)
-        console.log(closestTile)
+        //console.log(closestTile)
         //Find where is it (left, bottom or right)
         if(closestTile.canvasDrawData.position.x > currentPosition.x){
             //right
@@ -570,7 +671,7 @@ const placeItem = mousePosition => {
     }
 }
 
-AddToScene({
+const PlayerObject = AddToScene({
     movementSpeed:0.22,
     isRight:true,
     hasMoved:false,
@@ -616,7 +717,14 @@ AddToScene({
                 weight:0,
                 collision:{
                     collide:false,
-                    isFixed:false
+                    isFixed:false,
+                    collideBox: {
+                        y:0,
+                        x:35,
+                        width:null,
+                        height:60,
+                        display:false//true
+                    }
                 }
             },
             passive:false
@@ -626,8 +734,6 @@ AddToScene({
         const movement = Input.getAxis("Horizontal")
         const isSprinting = Input.getKey("Shift")
         const isAttacking = Input.getKey("mousedown") && isColliding && spriteChar.currentSet === "idle"
-
-
 
         if(movement < 0 && this.isRight){
             this.isRight = false
@@ -669,6 +775,8 @@ AddToScene({
                 particles.play()
 
                 DamageTile(newTile)
+            }else{
+                //Spawn(World.getPositionFromMousePosition())
             }
         }else if(isAttacking && InventoryManager.getCurrentItem().isPlaceable){
             const mousePosition = new Vector2(MousePosition.x,MousePosition.y)
@@ -754,6 +862,13 @@ const grid = new Grid((canvas) => ({
                     dropItem:generatedMap[col][row].dropItem
                 })
                 tile.physics.collision.collide = true
+                tile.physics.collision.collideBox = {
+                    y:0,
+                    x:0,
+                    width:32,
+                    height:32,
+                    display:false
+                }
                 tiles.push(tile)
             }
         }
@@ -763,7 +878,7 @@ const grid = new Grid((canvas) => ({
     let nextTree = randomIntFromInterval(7, 10)
     for (let col = 0; col < firstBlockPositions.length; col++)
     {
-        //firstBlockPositions[col] -> first block of in the X axis
+        //firstBlockPositions[col] -> first block in the X axis
 
         if (lastPlacement + nextTree <= col)
         {
@@ -846,14 +961,36 @@ const grid = new Grid((canvas) => ({
                 ...leafMetaData
             }))
 
-            //AlHamdoulilah
-
             lastPlacement = col
             nextTree = randomIntFromInterval(7, 10)
         }
 
     }
 
+
+    const houseBlocks = [] //generateHouse()
+
+
+    houseBlocks.forEach(e => {
+        const tile = new Tile({
+            position: new Vector2(e.x, e.y),
+            image:Item.all[e.type].image
+        },{
+            tileType:e.type,
+            health:Item.all[e.type].health
+        })
+
+
+        tile.physics.collision.collide = true
+        tile.physics.collision.collideBox = {
+            y:0,
+            x:0,
+            width:32,
+            height:32,
+            display:false
+        }
+        tiles.push(tile)
+    })
 
     return tiles
 })
@@ -985,6 +1122,7 @@ const DamageTile = tile => {
     }
 }
 
+
 const RemoveLeaves = position => {
     const r = grid.tiles.find(tile => tile.canvasDrawData.gridPosition.y === position.y && tile.canvasDrawData.gridPosition.x === position.x)
     const tiles = []
@@ -1002,3 +1140,26 @@ const RemoveLeaves = position => {
 }
 
 AddToScene(grid)
+
+const Spawn = position => {
+    const gameObject = AddToScene({
+        canvas: () => ({
+            type: "Sprite",
+            position: new Vector2(position.x,position.y),
+            sprite: ZombieSprite,
+            scale:0.5
+        }),
+        physics: {
+            weight: 6,
+            collision: {
+                collide: true,
+                isFixed: false
+            }
+        },
+        passive: false,
+        isPNJ:true
+    }, true)
+
+    const ia = new IA(gameObject)
+    ia.Follow(PlayerObject)
+}

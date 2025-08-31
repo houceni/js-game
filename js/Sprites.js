@@ -1,0 +1,27 @@
+export const ZombieSprite = new Sprite()
+ZombieSprite.set("idle",[
+    {
+        resource:"sprites/Zombie/Idle/sprite.png"
+    },
+    {
+        resource:"sprites/Zombie/Idle/sprite2.png"
+    },
+    {
+        resource:"sprites/Zombie/Idle/sprite3.png"
+    },
+    {
+        resource:"sprites/Zombie/Idle/sprite4.png"
+    },
+    {
+        resource:"sprites/Zombie/Idle/sprite5.png"
+    },
+    {
+        resource:"sprites/Zombie/Idle/sprite6.png"
+    },
+    {
+        resource:"sprites/Zombie/Idle/sprite7.png"
+    },
+    {
+        resource:"sprites/Zombie/Idle/sprite8.png"
+    }
+],true,100)

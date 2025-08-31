@@ -43,6 +43,13 @@ spriteWood.set("idle",[
     {resource:"Resources/images/Items/wood.png"}
 ])
 
+const spriteWoodBlock = new Sprite()
+spriteWoodBlock.set("idle",[
+    {
+        resource:"Resources/Images/Terrains/wood.png"
+    }
+])
+
 const grass = new Item("Grass")
 grass.maxStack = 100
 grass.resource = resources.grass
@@ -73,6 +80,16 @@ wood.checkSide = ["left","right","bottom","top"]
 wood.health = 2
 wood.dropItem = "Wood"
 wood.sprite = spriteWood
+
+const woodBlock = new Item("WoodBlock")
+woodBlock.maxStack = 100
+woodBlock.resource = resources.wood_block
+woodBlock.isPlaceable = true
+woodBlock.particlesColor = "#744A27"
+woodBlock.checkSide = ["left","right","bottom","top"]
+woodBlock.health = 2
+woodBlock.dropItem = "WoodBlock"
+woodBlock.sprite = spriteWoodBlock
 
 const dirt = new Item("Dirt")
 dirt.maxStack = 100

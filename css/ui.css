@@ -46,3 +46,72 @@
     bottom: 0;
     font-size: 10px;
 }
+
+#CraftWindow{
+    height:100%;
+    width:100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 13;
+    position: fixed;
+    display: none;
+}
+
+#CraftWindow.open{
+    display: block;
+}
+
+#InventoryManager,#CraftList{
+    height:50%;
+    padding: 20px 40px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+#CraftList .recipe{
+    margin-bottom: 40px;
+}
+#CraftList .recipe:last-child{
+    margin-bottom: 0;
+}
+
+#CraftList .recipe,#CraftList .ingredients, #CraftList .result{
+    display: flex;
+}
+
+#CraftList .icon{
+    padding:10px;
+    border-radius: 10px;
+    background-color: rgba(138, 131, 126, 0.8);
+    margin-right: 20px;
+    position: relative;
+}
+
+#CraftList .icon img{
+    max-height:32px;
+    max-width:32px;
+    border-radius: 5px;
+}
+
+#CraftList .icon .number{
+    position: absolute;
+    height: 26px;
+    width: 26px;
+    text-align: center;
+    padding-top: 5px;
+    box-sizing: border-box;
+    font-size: 12px;
+    background: white;
+    border-radius: 50%;
+    right: -10px;
+    top: -10px;
+}
+
+#CraftList .result::before{
+    content: "→";
+    display: block;
+    position: relative;
+    color: white;
+    font-weight: bold;
+    font-size: 40px;
+    margin-right: 20px;
+}
